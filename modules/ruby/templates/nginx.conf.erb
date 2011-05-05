@@ -1,0 +1,205 @@
+# http://unicorn.bogomips.org/examples/nginx.conf
+
+#user  nobody;
+worker_processes  1;
+
+pid /var/run/nginx.pid;
+
+events {
+  worker_connections  1024;
+}
+
+http {
+  include       mime.types;
+  default_type  application/octet-stream;
+
+  #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+  #                  '$status $body_bytes_sent "$http_referer" '
+  #                  '"$http_user_agent" "$http_x_forwarded_for"';
+
+
+  # This tells Nginx to ignore the contents of a file it is sending
+  # and uses the kernel sendfile instead
+  sendfile on;
+
+  # Set this to on if you have sendfile on
+  # It will prepend the HTTP response headers before
+  # calling sendfile()
+  tcp_nopush on;
+
+  gzip on;
+  gzip_http_version 1.0;
+  gzip_proxied any;
+  gzip_min_length 500;
+  gzip_disable msie6;
+  gzip_types text/plain text/html text/xml text/css text/comma-separated-values text/javascript application/x-javascript application/atom+xml;
+
+  keepalive_timeout  5;
+
+  upstream mobile {
+    # This is the socket we configured in unicorn.rb
+    # fail_timeout=0 means we always retry an upstream even if it failed
+    # to return a good HTTP response (in case the Unicorn master nukes a
+        # single worker for timing out).
+    server unix:/tmp/mobile.sock fail_timeout=0;
+  }
+
+  upstream dashboard {
+    server unix:/tmp/dashboard.sock fail_timeout=0;
+  }
+
+  server {
+    listen       81;
+    server_name  _;
+    root /var/www/mobile/current/public;
+
+    charset utf-8;
+
+    access_log  /var/log/nginx-mobile.access.log  combined;
+    error_log  /var/log/nginx-mobile.error.log;
+
+    location ~* \.(css|js|png) {
+      # set Expires and Cache-Control max-age to far future values and rely on changing file names to keep content fresh
+      expires max;
+      # by not sending last-modified, browsers won't send a conditional if-modified-since request that results in unnecessary 304 hits
+      add_header Last-Modified "";
+    }
+
+    location / {
+      auth_basic "denied";
+      auth_basic_user_file /usr/local/nginx/conf/htpasswd;
+
+      # an HTTP header important enough to have its own Wikipedia entry:
+      #   http://en.wikipedia.org/wiki/X-Forwarded-For
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+      # enable this if and only if you use HTTPS, this helps Rack
+      # set the proper protocol for doing redirects:
+      # proxy_set_header X-Forwarded-Proto https;
+
+      # pass the Host: header from the client right along so redirects
+      # can be set properly within the Rack application
+      proxy_set_header Host $http_host;
+
+      # we don't want nginx trying to do something clever with
+      # redirects, we set the Host: header above already.
+      proxy_redirect off;
+
+      # set "proxy_buffering off" *only* for Rainbows! when doing
+      # Comet/long-poll stuff.  It's also safe to set if you're
+      # using only serving fast clients with Unicorn + nginx.
+      # Otherwise you _want_ nginx to buffer responses to slow
+      # clients, really.
+      # proxy_buffering off;
+
+      # Try to serve static files from nginx, no point in making an
+      # *application* server like Unicorn/Rainbows! serve static files.
+      if (!-f $request_filename) {
+        proxy_pass http://mobile;
+        break;
+      }
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+      root   html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+      #    proxy_pass   http://127.0.0.1;
+      #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+      #    root           html;
+      #    fastcgi_pass   127.0.0.1:9000;
+      #    fastcgi_index  index.php;
+      #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+      #    include        fastcgi_params;
+      #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with nginx's one
+    #
+    #location ~ /\.ht {
+      #    deny  all;
+      #}
+  }
+
+  server {
+    listen       81;
+    server_name  <%= environment.eql?("staging") ? "s" : "" %>d.shortcast.com;
+    root /var/www/dashboard/current/public;
+
+    access_log  /var/log/nginx-dashboard.access.log  combined;
+    error_log  /var/log/nginx-dashboard.error.log;
+
+    charset utf-8;
+
+    location ~* \.(css|js|png) {
+      # set Expires and Cache-Control max-age to far future values and rely on changing file names to keep content fresh
+      expires max;
+      # by not sending last-modified, browsers won't send a conditional if-modified-since request that results in unnecessary 304 hits
+      add_header Last-Modified "";
+    }
+
+    location / {
+      #auth_basic "denied";
+      #auth_basic_user_file /usr/local/nginx/conf/htpasswd;
+
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Host $http_host;
+      proxy_redirect off;
+      if (!-f $request_filename) {
+        proxy_pass http://dashboard;
+        break;
+      }
+    }
+  }
+
+
+
+
+  # another virtual host using mix of IP-, name-, and port-based configuration
+  #
+  #server {
+    #    listen       8000;
+    #    listen       somename:8080;
+    #    server_name  somename  alias  another.alias;
+
+    #    location / {
+      #        root   html;
+      #        index  index.html index.htm;
+      #    }
+    #}
+
+
+  # HTTPS server
+  #
+  #server {
+    #    listen       443;
+    #    server_name  localhost;
+
+    #    ssl                  on;
+    #    ssl_certificate      cert.pem;
+    #    ssl_certificate_key  cert.key;
+
+    #    ssl_session_timeout  5m;
+
+    #    ssl_protocols  SSLv2 SSLv3 TLSv1;
+    #    ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP;
+    #    ssl_prefer_server_ciphers   on;
+
+    #    location / {
+      #        root   html;
+      #        index  index.html index.htm;
+      #    }
+    #}
+}

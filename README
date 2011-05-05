@@ -1,0 +1,15 @@
+git
+ruby
+gem (brew)
+
+# macports
+http://www.macports.org/install.php
+sudo port selfupdate
+sudo port install puppet
+sudo puppet apply -vd --confdir .  --libdir lib --factpath facts manifests/development.pp
+
+# homebrew
+sudo chown -R `whoami` /usr/local
+ruby -e "$(curl -fsSL https://gist.github.com/raw/323731/install_homebrew.rb)"
+#curl -L http://github.com/mxcl/homebrew/tarball/master | tar xz --strip 1 -C /usr/local
+sudo gem install puppet --no-ri --no-rdoc

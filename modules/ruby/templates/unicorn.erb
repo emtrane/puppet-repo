@@ -1,0 +1,57 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Provides:          unicorn
+# Required-Start:    $local_fs $remote_fs $network $syslog
+# Required-Stop:     $local_fs $remote_fs $network $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts the unicorn app server
+# Description:       starts unicorn using start-stop-daemon
+### END INIT INFO
+
+APP="$2"
+DAEMON=/usr/local/rvm/gems/<%= ruby_version %>/bin/unicorn_rails
+DAEMON_OPTS="-E <%= environment %> -c /var/www/$APP/unicorn.rb -D"
+NAME=unicorn
+DESC="unicorn $APP"
+PID="/var/run/$NAME-$APP.pid"
+
+
+test -x $DAEMON || exit 0
+
+#rvm <%= ruby_version %>
+
+case "$1" in
+  start)
+        echo -n "Starting $DESC: "
+        start-stop-daemon --start --quiet --pidfile $PID --exec $DAEMON -- $DAEMON_OPTS || true
+        echo "$NAME."
+        ;;
+  stop)
+        echo -n "Stopping $DESC: "
+        start-stop-daemon --stop --pidfile $PID || true
+        echo "$NAME."
+        ;;
+  restart|force-reload)
+        echo -n "Restarting $DESC: "
+        start-stop-daemon --stop --pidfile $PID || true
+        sleep 1
+        start-stop-daemon --start --quiet --pidfile $PID --exec $DAEMON -- $DAEMON_OPTS || true
+        echo "$NAME."
+        ;;
+  reload)
+        echo -n "Reloading $DESC configuration: "
+        start-stop-daemon --stop --signal HUP --quiet --pidfile $PID --exec $DAEMON || true
+        echo "$NAME."
+        ;;
+  status)
+        status_of_proc -p $PID "$DAEMON" unicorn && exit 0 || exit $?
+        ;;
+  *)
+        echo "Usage: $NAME {start|stop|restart} {mobile|dashboard}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

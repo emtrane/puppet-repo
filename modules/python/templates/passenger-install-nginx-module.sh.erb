@@ -1,0 +1,9 @@
+#!/bin/bash
+                               
+RUBY_VERSION="$1"
+
+export GEM_HOME=/usr/local/rvm/gems/$RUBY_VERSION
+export GEM_PATH=/usr/local/rvm/gems/$RUBY_VERSION:/usr/local/rvm/gems/$RUBY_VERSION@global
+export BUNDLE_PATH=/usr/local/rvm/gems/$RUBY_VERSION
+
+rvm $RUBY_VERSION && /usr/local/rvm/gems/$RUBY_VERSION/bin/passenger-install-nginx-module --auto --prefix=/opt/nginx --auto-download > /dev/null 2>&1
